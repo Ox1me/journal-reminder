@@ -29,9 +29,46 @@ const NotificationScheduler = () => {
     });
   };
 
+  // Generate times when settings change
   React.useEffect(() => {
     setScheduledTimes(generateRandomTimes());
   }, [startHour, endHour, frequency]);
+
+  // Handle notifications
+  React.useEffect(() => {
+    const requestPermissionAndSchedule = async () => {
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          scheduledTimes.forEach(time => {
+            const [hours, minutes] = time.split(':').map(Number);
+            const now = new Date();
+            const scheduleTime = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate(),
+              hours,
+              minutes
+            );
+            
+            // If time has passed today, schedule for tomorrow
+            if (scheduleTime < now) {
+              scheduleTime.setDate(scheduleTime.getDate() + 1);
+            }
+            
+            setTimeout(() => {
+              new Notification('Time to Journal', {
+                body: 'Take a moment to write in your journal',
+                icon: 'icon.png'
+              });
+            }, scheduleTime.getTime() - now.getTime());
+          });
+        }
+      }
+    };
+
+    requestPermissionAndSchedule();
+  }, [scheduledTimes]);
 
   return React.createElement('div', { className: 'p-4 max-w-md mx-auto' },
     React.createElement('div', { className: 'space-y-6 bg-white shadow rounded-lg p-6' },
