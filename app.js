@@ -1,7 +1,14 @@
 const NotificationScheduler = () => {
-  const [startHour, setStartHour] = React.useState(9);
-  const [endHour, setEndHour] = React.useState(21);
-  const [frequency, setFrequency] = React.useState(1);
+  // Load saved settings or use defaults
+  const [startHour, setStartHour] = React.useState(() => 
+    parseInt(localStorage.getItem('startHour')) || 9
+  );
+  const [endHour, setEndHour] = React.useState(() => 
+    parseInt(localStorage.getItem('endHour')) || 21
+  );
+  const [frequency, setFrequency] = React.useState(() => 
+    parseInt(localStorage.getItem('frequency')) || 1
+  );
   const [scheduledTimes, setScheduledTimes] = React.useState([]);
 
   const generateRandomTimes = () => {
@@ -29,17 +36,51 @@ const NotificationScheduler = () => {
     });
   };
 
-  // Generate times when settings change
+  // Save settings when they change
   React.useEffect(() => {
-    setScheduledTimes(generateRandomTimes());
+    localStorage.setItem('startHour', startHour);
+    localStorage.setItem('endHour', endHour);
+    localStorage.setItem('frequency', frequency);
+  }, [startHour, endHour, frequency]);
+
+  // Generate new times at midnight
+  React.useEffect(() => {
+    const generateTimesForToday = () => {
+      setScheduledTimes(generateRandomTimes());
+    };
+
+    // Generate initial times
+    generateTimesForToday();
+
+    // Calculate time until next midnight
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const msUntilMidnight = tomorrow.getTime() - now.getTime();
+
+    // Set up daily regeneration
+    const midnightTimer = setTimeout(() => {
+      generateTimesForToday();
+      // Set up recurring daily timer
+      setInterval(generateTimesForToday, 24 * 60 * 60 * 1000);
+    }, msUntilMidnight);
+
+    return () => {
+      clearTimeout(midnightTimer);
+    };
   }, [startHour, endHour, frequency]);
 
   // Handle notifications
   React.useEffect(() => {
-    const requestPermissionAndSchedule = async () => {
+    const scheduleNotifications = async () => {
       if ('Notification' in window) {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
+          // Clear any existing notification timeouts
+          window.existingTimeouts?.forEach(timeout => clearTimeout(timeout));
+          window.existingTimeouts = [];
+
           scheduledTimes.forEach(time => {
             const [hours, minutes] = time.split(':').map(Number);
             const now = new Date();
@@ -51,23 +92,24 @@ const NotificationScheduler = () => {
               minutes
             );
             
-            // If time has passed today, schedule for tomorrow
             if (scheduleTime < now) {
               scheduleTime.setDate(scheduleTime.getDate() + 1);
             }
             
-            setTimeout(() => {
+            const timeout = setTimeout(() => {
               new Notification('Time to Journal', {
                 body: 'Take a moment to write in your journal',
                 icon: 'icon.png'
               });
             }, scheduleTime.getTime() - now.getTime());
+
+            window.existingTimeouts.push(timeout);
           });
         }
       }
     };
 
-    requestPermissionAndSchedule();
+    scheduleNotifications();
   }, [scheduledTimes]);
 
   return React.createElement('div', { className: 'p-4 max-w-md mx-auto' },
